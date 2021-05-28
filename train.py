@@ -581,7 +581,7 @@ if __name__ == '__main__':
         if opt.bucket:
             os.system('gsutil cp gs://%s/evolve.txt .' % opt.bucket)  # download evolve.txt if exists
 
-        for _ in range(300):  # generations to evolve
+        for num in range(100):  # generations to evolve
             if Path('evolve.txt').exists():  # if evolve.txt exists: select best hyps and mutate
                 # Select parent(s)
                 parent = 'single'  # parent selection method: 'single' or 'weighted'
@@ -603,9 +603,9 @@ if __name__ == '__main__':
                 ng = len(meta)
                 v = np.ones(ng)
                 while all(v == 1):  # mutate until a change occurs (prevent duplicates)
-                    v = (g * (npr.random(ng) < mp) * npr.randn(ng) * npr.random() * s + 1).clip(0.3, 3.0)
+                    v = (g * (npr.random(ng) < mp) * npr.randn(ng) * npr.random() * s + 1).clip(0.3, 3.0)  # 代表每个超参突变的程度
                 for i, k in enumerate(hyp.keys()):  # plt.hist(v.ravel(), 300)
-                    hyp[k] = float(x[i + 7] * v[i])  # mutate
+                    hyp[k] = float(x[i + 7] * v[i])  # mutate 为什么要i+7:因为x里面还包含了PR等7个指标，超参数是从索引8开始的。
 
             # Constrain to limits
             for k, v in meta.items():
@@ -618,6 +618,7 @@ if __name__ == '__main__':
 
             # Write mutation results
             print_mutation(hyp.copy(), results, yaml_file, opt.bucket)
+            print("\nAccomplished evolve step %d" % num)
 
         # Plot results
         plot_evolution(yaml_file)

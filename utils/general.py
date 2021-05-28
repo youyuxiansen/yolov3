@@ -527,10 +527,12 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
 
 def print_mutation(hyp, results, yaml_file='hyp_evolved.yaml', bucket=''):
     # Print mutation results to evolve.txt (for use with train.py --evolve)
-    a = '%10s' * len(hyp) % tuple(hyp.keys())  # hyperparam keys
-    b = '%10.3g' * len(hyp) % tuple(hyp.values())  # hyperparam values
-    c = '%10.4g' * len(results) % results  # results (P, R, mAP@0.5, mAP@0.5:0.95, val_losses x 3)
-    print('\n%s\n%s\nEvolved fitness: %s\n' % (a, b, c))
+    a = '%10s ' * len(hyp) % tuple(hyp.keys())  # hyperparam keys
+    b = '%10.3g ' * len(hyp) % tuple(hyp.values())  # hyperparam values
+    results_keys = ('P', 'R', 'mAP@0.5', 'mAP@0.5:0.95', 'box_losses', 'obj_losses', 'cls_losses')
+    d = '%10s ' * len(results_keys) % results_keys  # hyperparam keys
+    c = '%10.4g ' * len(results) % results
+    print('\n%s\n%s\nEvolved fitness:\n%s\n%s\n' % (a, b, d, c))
 
     if bucket:
         url = 'gs://%s/evolve.txt' % bucket
