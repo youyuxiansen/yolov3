@@ -120,7 +120,7 @@ class _RepeatSampler(object):
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640, stride=32):
+    def __init__(self, path, img_size=640, stride=32, trt=False):
         p = str(Path(path).absolute())  # os-agnostic absolute path
         if '*' in p:
             files = sorted(glob.glob(p, recursive=True))  # glob
@@ -181,6 +181,8 @@ class LoadImages:  # for inference
             assert img0 is not None, 'Image Not Found ' + path
             print(f'image {self.count}/{self.nf} {path}: ', end='')
 
+        if trt:
+            return path, img, img0, self.cap
         # Padded resize
         img = letterbox(img0, self.img_size, stride=self.stride)[0]
 
@@ -346,7 +348,7 @@ def img2label_paths(img_paths):
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='', augmentations=None):
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -356,7 +358,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         self.stride = stride
         self.path = path
-        self.augmentation = augmentations
 
         try:
             f = []  # image files
@@ -444,7 +445,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         if cache_images:
             gb = 0  # Gigabytes of cached images
             self.img_hw0, self.img_hw = [None] * n, [None] * n
-            results = ThreadPool(8).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # 8 threads
+            results = ThreadPool(8).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # multithreads
+            # results = ThreadPool(n if n < os.cpu_count() else os.cpu_count()).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # multithreads
             pbar = tqdm(enumerate(results), total=n)
             for i, x in pbar:
                 self.imgs[i], self.img_hw0[i], self.img_hw[i] = x  # img, hw_original, hw_resized = load_image(self, i)
@@ -1063,3 +1065,13 @@ def autosplit(path='../coco128', weights=(0.9, 0.1, 0.0), annotated_only=False):
         if not annotated_only or Path(img2label_paths([str(img)])[0]).exists():  # check label
             with open(path / txt[i], 'a') as f:
                 f.write(str(img) + '\n')  # add image to txt file
+
+
+if __name__ == '__main__':
+    img = cv2.imread('/home/yousixia/project/yolov3/data/images/imaaug_demo_image.jpeg')
+    img2, targets = random_perspective(img,
+        targets=(), segments=(), degrees=10, translate=.1, scale=.1,
+        shear=10, perspective=0.0, border=(0, 0))
+    import imgaug as ia
+    ia.imshow(img)  # base
+    ia.imshow(img2)  # warped

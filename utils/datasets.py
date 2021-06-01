@@ -119,8 +119,41 @@ class _RepeatSampler(object):
             yield from iter(self.sampler)
 
 
+def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+    # Resize and pad image while meeting stride-multiple constraints
+    shape = img.shape[:2]  # current shape [height, width]
+    if isinstance(new_shape, int):
+        new_shape = (new_shape, new_shape)
+
+    # Scale ratio (new / old)
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    if not scaleup:  # only scale down, do not scale up (for better test mAP)
+        r = min(r, 1.0)
+
+    # Compute padding
+    ratio = r, r  # width, height ratios
+    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
+    if auto:  # minimum rectangle
+        dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
+    elif scaleFill:  # stretch
+        dw, dh = 0.0, 0.0
+        new_unpad = (new_shape[1], new_shape[0])
+        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
+
+    dw /= 2  # divide padding into 2 sides
+    dh /= 2
+
+    if shape[::-1] != new_unpad:  # resize
+        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+    return img, ratio, (dw, dh)
+
+
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640, stride=32):
+    def __init__(self, path, img_size=640):
         p = str(Path(path).absolute())  # os-agnostic absolute path
         if '*' in p:
             files = sorted(glob.glob(p, recursive=True))  # glob
@@ -136,7 +169,6 @@ class LoadImages:  # for inference
         ni, nv = len(images), len(videos)
 
         self.img_size = img_size
-        self.stride = stride
         self.files = images + videos
         self.nf = ni + nv  # number of files
         self.video_flag = [False] * ni + [True] * nv
@@ -181,14 +213,11 @@ class LoadImages:  # for inference
             assert img0 is not None, 'Image Not Found ' + path
             print(f'image {self.count}/{self.nf} {path}: ', end='')
 
-        # Padded resize
-        img = letterbox(img0, self.img_size, stride=self.stride)[0]
-
         # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = img0[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        return path, img, img0, self.cap
+        return path, img0, img0, self.cap
 
     def new_video(self, path):
         self.frame = 0
@@ -199,10 +228,54 @@ class LoadImages:  # for inference
         return self.nf  # number of files
 
 
-class LoadWebcam:  # for inference
-    def __init__(self, pipe='0', img_size=640, stride=32):
-        self.img_size = img_size
+class LoadImagesStrided(LoadImages):
+    # Resize and pad image to meet the stride-multiple constraints
+    def __init__(self, path, img_size=640, stride=32):
+        super(LoadImagesStrided, self).__init__(path, img_size=640)
         self.stride = stride
+
+    def __next__(self):
+        if self.count == self.nf:
+            raise StopIteration
+        path = self.files[self.count]
+
+        if self.video_flag[self.count]:
+            # Read video
+            self.mode = 'video'
+            ret_val, img0 = self.cap.read()
+            if not ret_val:
+                self.count += 1
+                self.cap.release()
+                if self.count == self.nf:  # last video
+                    raise StopIteration
+                else:
+                    path = self.files[self.count]
+                    self.new_video(path)
+                    ret_val, img0 = self.cap.read()
+
+            self.frame += 1
+            print(f'video {self.count + 1}/{self.nf} ({self.frame}/{self.nframes}) {path}: ', end='')
+
+        else:
+            # Read image
+            self.count += 1
+            img0 = cv2.imread(path)  # BGR
+            assert img0 is not None, 'Image Not Found ' + path
+            print(f'image {self.count}/{self.nf} {path}: ', end='')
+
+        # Padded resize
+        img = letterbox(img0, self.img_size, stride=self.stride)[0]
+
+        # Convert
+        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = np.ascontiguousarray(img)
+
+        return path, img, img0, self.cap
+
+
+class LoadWebcam:  # for inference
+    def __init__(self, pipe='0', img_size=640):
+        self.img_size = img_size
 
         if pipe.isnumeric():
             pipe = eval(pipe)  # local camera
@@ -244,6 +317,48 @@ class LoadWebcam:  # for inference
         img_path = 'webcam.jpg'
         print(f'webcam {self.count}: ', end='')
 
+        # Convert
+        img = img0[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = np.ascontiguousarray(img)
+
+        return img_path, img0, img0, None
+
+    def __len__(self):
+        return 0
+
+
+class LoadWebcamStrided(LoadWebcam):
+    # Resize and pad image to meet the stride-multiple constraints
+    def __init__(self, pipe='0', img_size=640, stride=32):
+        super(LoadWebcamStrided, self).__init__(pipe, img_size)
+        self.stride = stride
+
+    def __next__(self):
+        self.count += 1
+        if cv2.waitKey(1) == ord('q'):  # q to quit
+            self.cap.release()
+            cv2.destroyAllWindows()
+            raise StopIteration
+
+        # Read frame
+        if self.pipe == 0:  # local camera
+            ret_val, img0 = self.cap.read()
+            img0 = cv2.flip(img0, 1)  # flip left-right
+        else:  # IP camera
+            n = 0
+            while True:
+                n += 1
+                self.cap.grab()
+                if n % 30 == 0:  # skip frames
+                    ret_val, img0 = self.cap.retrieve()
+                    if ret_val:
+                        break
+
+        # Print
+        assert ret_val, f'Camera Error {self.pipe}'
+        img_path = 'webcam.jpg'
+        print(f'webcam {self.count}: ', end='')
+
         # Padded resize
         img = letterbox(img0, self.img_size, stride=self.stride)[0]
 
@@ -253,15 +368,11 @@ class LoadWebcam:  # for inference
 
         return img_path, img, img0, None
 
-    def __len__(self):
-        return 0
-
 
 class LoadStreams:  # multiple IP or RTSP cameras
-    def __init__(self, sources='streams.txt', img_size=640, stride=32):
+    def __init__(self, sources='streams.txt', img_size=640, check_func=None):
         self.mode = 'stream'
         self.img_size = img_size
-        self.stride = stride
 
         if os.path.isfile(sources):
             with open(sources, 'r') as f:
@@ -291,12 +402,27 @@ class LoadStreams:  # multiple IP or RTSP cameras
             print(f' success ({w}x{h} at {self.fps:.2f} FPS).')
             thread.start()
         print('')  # newline
-
         # check for common shapes
-        s = np.stack([letterbox(x, self.img_size, stride=self.stride)[0].shape for x in self.imgs], 0)  # shapes
+        s = np.stack([self.common_shape_check(x, check_func).shape for x in self.imgs], 0)  # shapes
         self.rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
         if not self.rect:
             print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
+
+    def common_shape_check(self, img, check_func):
+        """
+        Choose a function to resize and pad image and return it.Check for common shapes
+        Parameters
+        ----------
+        img
+        check_func: Could be None or a funtion
+
+        Returns Image after processing
+        -------
+
+        """
+        if check_func is None:
+            return img
+        return check_func(img, self.img_size, stride=self.stride)[0]
 
     def update(self, index, cap):
         # Read next stream frame in a daemon thread
@@ -322,8 +448,36 @@ class LoadStreams:  # multiple IP or RTSP cameras
             cv2.destroyAllWindows()
             raise StopIteration
 
+        # Stack
+        img = np.stack(img0, 0)
+
+        # Convert
+        img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
+        img = np.ascontiguousarray(img)
+
+        return self.sources, img, img0, None
+
+    def __len__(self):
+        return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
+
+
+class LoadStreamsStrided(LoadStreams):
+    def __init__(self, sources='streams.txt', img_size=640, check_func=letterbox, stride=32):
+        self.stride = stride
+        self.check_func = check_func
+        super(LoadStreamsStrided, self).__init__(
+            sources='streams.txt', img_size=640, check_func=check_func)
+
+
+    def __next__(self):
+        self.count += 1
+        img0 = self.imgs.copy()
+        if cv2.waitKey(1) == ord('q'):  # q to quit
+            cv2.destroyAllWindows()
+            raise StopIteration
+
         # Letterbox
-        img = [letterbox(x, self.img_size, auto=self.rect, stride=self.stride)[0] for x in img0]
+        img = [self.check_func(x, self.img_size, auto=self.rect, stride=self.stride)[0] for x in img0]
 
         # Stack
         img = np.stack(img, 0)
@@ -334,8 +488,6 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
         return self.sources, img, img0, None
 
-    def __len__(self):
-        return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
 def img2label_paths(img_paths):
@@ -816,39 +968,6 @@ def replicate(img, labels):
     return img, labels
 
 
-def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
-    # Resize and pad image while meeting stride-multiple constraints
-    shape = img.shape[:2]  # current shape [height, width]
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    # Scale ratio (new / old)
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    if not scaleup:  # only scale down, do not scale up (for better test mAP)
-        r = min(r, 1.0)
-
-    # Compute padding
-    ratio = r, r  # width, height ratios
-    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-    if auto:  # minimum rectangle
-        dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
-    elif scaleFill:  # stretch
-        dw, dh = 0.0, 0.0
-        new_unpad = (new_shape[1], new_shape[0])
-        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
-
-    dw /= 2  # divide padding into 2 sides
-    dh /= 2
-
-    if shape[::-1] != new_unpad:  # resize
-        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
-    return img, ratio, (dw, dh)
-
-
 def random_perspective(img, targets=(), segments=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0,
                        border=(0, 0)):
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
@@ -1068,8 +1187,8 @@ def autosplit(path='../coco128', weights=(0.9, 0.1, 0.0), annotated_only=False):
 if __name__ == '__main__':
     img = cv2.imread('/home/yousixia/project/yolov3/data/images/imaaug_demo_image.jpeg')
     img2, targets = random_perspective(img,
-        targets=(), segments=(), degrees=10, translate=.1, scale=.1,
-        shear=10, perspective=0.0, border=(0, 0))
+                                       targets=(), segments=(), degrees=10, translate=.1, scale=.1,
+                                       shear=10, perspective=0.0, border=(0, 0))
     import imgaug as ia
     ia.imshow(img)  # base
     ia.imshow(img2)  # warped

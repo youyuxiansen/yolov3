@@ -5,14 +5,14 @@ import shutil
 from sklearn.model_selection import train_test_split
 
 # 1.标签路径
-data_root = '/home/yousixia/data/images'
-saved_path = os.path.join(data_root, "VOC2007_amicro/")  # 保存路径
+data_root = '/home/yousixia/data/images'  # 图片的根目录
 labelme_path = [
     os.path.join(data_root, "labelme/"),
     os.path.join(data_root, "labelme_difficult202105141453/"),
     os.path.join(data_root, "labelme_20210520/"),
     os.path.join(data_root, "negative_image/"),
-]  # 原始labelme标注数据路径
+]  # 原始labelme标注数据路径， 文件夹里包含jpg和xml文件，negative_image文件夹仅包含jpg，放加强训练用的负样本。
+saved_path = os.path.join(data_root, "VOC2007_amicro/")  # 保存路径
 
 # 2.创建要求文件夹
 if not os.path.exists(saved_path + "Annotations"):
