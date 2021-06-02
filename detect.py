@@ -14,7 +14,7 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
-from utils.inference import HostDeviceMem, TrtModel
+from utils.inference.tensorrt_inference import HostDeviceMem, TrtModel
 
 
 def trt_detect(save_img=False):
