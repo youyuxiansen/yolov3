@@ -1,15 +1,11 @@
-import cv2
 import random
 import colorsys
-import numpy as np
-import math
-import time
-import sys
-import matplotlib.pyplot as plt
-import matplotlib.image as mimg
-from PIL import Image
 
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
 from classes import coco
+
 
 class Visualizer():
     def __init__(self):
@@ -118,7 +114,7 @@ class Visualizer():
             _, _, width, height, _ = grid.shape
             px_step = 640 // width
             window_name = 'classes {}'.format(height)
-            cv2.namedWindow(window_name)
+            # cv2.namedWindow(window_name)
             copy = img.copy()
             for xi in range(width):
                 for yi in range(height):
@@ -130,23 +126,36 @@ class Visualizer():
                     
                     if mc > conf_thres:
                         cv2.rectangle(copy, (yi * px_step, xi * px_step), ((yi + 1) * px_step, (xi + 1) * px_step), self.color_list[int(mci[0])], -1)
-                               
-            cv2.imshow(window_name, copy)
+
+            plt.imshow(copy)
+            plt.xmin = 0
+            plt.xmax = 640
+            plt.ymin = 0
+            plt.ymaxy = 640
+            plt.show()
+            plt.title('classes {}'.format(height))
             cv2.waitKey(1000) 
                        
         return None
 
     def draw_boxes(self, img, boxes):
         window_name = 'boxes'
-        cv2.namedWindow(window_name)
+        # cv2.namedWindow(window_name)
         copy = img.copy()
         overlay = img.copy()
         for box in boxes:
-            x1, y1, x2, y2 = box
+            x1, y1, x2, y2 = box.astype(int)
             cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), -1)
             cv2.addWeighted(overlay, 0.05, copy, 1 - 0.5, 0, copy)
 
-        cv2.imshow(window_name, copy)
+        # cv2.imwrite(window_name, copy)
+        plt.imshow(copy)
+        plt.xmin = 0
+        plt.xmax = 640
+        plt.ymin = 0
+        plt.ymaxy = 640
+        plt.show()
+        plt.title(window_name)
         cv2.waitKey(10000) 
 
     def draw_grid(self, img, output, i):
