@@ -4,12 +4,12 @@ import colorsys
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from classes import coco
+from classes import amicro
 
 
 class Visualizer():
     def __init__(self):
-        self.color_list = self.gen_colors(coco)
+        self.color_list = self.gen_colors(amicro)
     
     def gen_colors(self, classes):
         """
@@ -33,7 +33,17 @@ class Visualizer():
             bgr = (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
             bgrs.append(bgr)
         return bgrs
-    
+
+    def plt_draw(self, img, window_name=None, imgsz=640):
+        plt.imshow(img)
+        plt.xmin = 0
+        plt.xmax = imgsz
+        plt.ymin = 0
+        plt.ymaxy = imgsz
+        plt.show()
+        if not window_name:
+            plt.title(window_name)
+
     def draw_object_grid(self, img, grids, conf_thres=0.08):
         """
             visualize object probabilty grid overlayed onto image
@@ -88,13 +98,8 @@ class Visualizer():
             cv2.addWeighted(overlay, 0.5, copy, 1 - 0.5, 0, copy)
 
             # make mat plt
-            plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
-            plt.title('Grid Visualization \n stride: {}'.format(px_step))
-            plt.xmin = 0
-            plt.xmax = 640
-            plt.ymin = 0
-            plt.ymaxy = 640
-            plt.show()
+            self.plt_draw(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB),
+                     window_name='Grid Visualization \n stride: {}'.format(px_step))
             continue
             maxes = grid.max(axis = 1)
 
@@ -127,6 +132,7 @@ class Visualizer():
                     if mc > conf_thres:
                         cv2.rectangle(copy, (yi * px_step, xi * px_step), ((yi + 1) * px_step, (xi + 1) * px_step), self.color_list[int(mci[0])], -1)
 
+            self.plt_draw(copy, window_name='classes {}'.format(height))
             plt.imshow(copy)
             plt.xmin = 0
             plt.xmax = 640
@@ -137,6 +143,23 @@ class Visualizer():
             cv2.waitKey(1000) 
                        
         return None
+
+    def plot_one_box(self, img, boxes, color=None, label=None, line_thickness=3):
+        # Plots one bounding box on image img
+        tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
+        color = color or [random.randint(0, 255) for _ in range(3)]
+        for box in boxes:
+            x = box.astype(int)
+            c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
+            cv2.rectangle(img, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+            if label:
+                tf = max(tl - 1, 1)  # font thickness
+                t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+                c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+                cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
+                cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+        self.plt_draw(img)
+        # plt.title(window_name)
 
     def draw_boxes(self, img, boxes):
         window_name = 'boxes'
@@ -149,14 +172,8 @@ class Visualizer():
             cv2.addWeighted(overlay, 0.05, copy, 1 - 0.5, 0, copy)
 
         # cv2.imwrite(window_name, copy)
-        plt.imshow(copy)
-        plt.xmin = 0
-        plt.xmax = 640
-        plt.ymin = 0
-        plt.ymaxy = 640
-        plt.show()
-        plt.title(window_name)
-        cv2.waitKey(10000) 
+        self.plt_draw(copy, window_name)
+        cv2.waitKey(10000)
 
     def draw_grid(self, img, output, i):
         x = 0
@@ -170,19 +187,20 @@ class Visualizer():
 
     def draw_results(self, img, boxes, confs, classes):
         window_name = 'final results'
-        cv2.namedWindow(window_name)
+        # cv2.namedWindow(window_name)
         overlay = img.copy()
         final = img.copy()
         for box, conf, cls in zip(boxes, confs, classes):
             # draw rectangle
-            x1, y1, x2, y2 = box
+            x1, y1, x2, y2 = box.astype(int)
             conf = conf[0]
-            cls_name = coco[cls]
+            cls_name = amicro[cls]
             color = self.color_list[cls]
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
             # draw text
             cv2.putText(final, '%s %f' % (cls_name, conf), org=(x1, int(y1+10)), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.5, color=(255, 255, 255))
         cv2.addWeighted(overlay, 0.5, final, 1 - 0.5, 0, final)
-        cv2.imshow(window_name, final)
+
+        self.plt_draw(final)
         cv2.waitKey(20)
         return final

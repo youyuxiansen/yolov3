@@ -8,6 +8,8 @@ coco = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 't
         'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
         'hair drier', 'toothbrush']
 
+amicro = ['Robot']
+
 if __name__ == '__main__':
     print("coco 16", coco[16])
     print("coco 5", coco[5])
