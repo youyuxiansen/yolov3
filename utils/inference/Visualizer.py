@@ -4,7 +4,8 @@ import colorsys
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from classes import amicro
+from .classes import amicro
+# from utils.inference.classes import amicro
 
 
 class Visualizer():
@@ -116,7 +117,7 @@ class Visualizer():
             conf_thres -- float -- minimum threshold for class probability
         """
         for grid in grids:
-            _, _, width, height, _ = grid.shape
+            _, _, height, width, _ = grid.shape
             px_step = 640 // width
             window_name = 'classes {}'.format(height)
             # cv2.namedWindow(window_name)
@@ -137,7 +138,7 @@ class Visualizer():
             plt.xmin = 0
             plt.xmax = 640
             plt.ymin = 0
-            plt.ymaxy = 640
+            plt.ymax = 640
             plt.show()
             plt.title('classes {}'.format(height))
             cv2.waitKey(1000) 
@@ -202,5 +203,5 @@ class Visualizer():
         cv2.addWeighted(overlay, 0.5, final, 1 - 0.5, 0, final)
 
         self.plt_draw(final)
-        cv2.waitKey(20)
+        # cv2.waitKey(20)
         return final

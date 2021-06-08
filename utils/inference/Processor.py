@@ -9,19 +9,21 @@ import numpy as np
 
 
 class Processor():
-	def __init__(self, model):
+	def __init__(self, model, anchor_nums, nc, anchors, output_shapes, img_size):
 		# load tensorrt engine
+		self.cfx = cuda.Device(0).make_context()
 		TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 		TRTbin = model
-		print('trtbin', TRTbin)
-		with open(TRTbin, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
+		# print('trtbin', TRTbin)
+		runtime = trt.Runtime(TRT_LOGGER)
+		with open(TRTbin, 'rb') as f:
 			engine = runtime.deserialize_cuda_engine(f.read())
 		self.context = engine.create_execution_context()
 		# allocate memory
 		inputs, outputs, bindings = [], [], []
 		stream = cuda.Stream()
 		for binding in engine:
-			size = trt.volume(engine.get_binding_shape(binding))
+			size = trt.volume(engine.get_binding_shape(binding)) * engine.max_batch_size
 			dtype = trt.nptype(engine.get_binding_dtype(binding))
 			host_mem = cuda.pagelocked_empty(size, dtype)
 			device_mem = cuda.mem_alloc(host_mem.nbytes)
@@ -35,58 +37,76 @@ class Processor():
 		self.outputs = outputs
 		self.bindings = bindings
 		self.stream = stream
-		self.anchor_nums = 4
-		self.nc = 1  # classes
+		self.anchor_nums = anchor_nums
+		self.nc = nc  # classes
 		self.no = self.nc + 5  # outputs per anchor
 		# post processing config
-		filters = self.no * self.anchor_nums
-		self.output_shapes = [
-			(1, self.anchor_nums, 80, 80, self.no),
-			(1, self.anchor_nums, 40, 40, self.no),
-			(1, self.anchor_nums, 20, 20, self.no)
-		]
+		self.output_shapes = output_shapes
 		self.strides = np.array([8., 16., 32.])
-		anchors = np.array([
-			[[11, 10], [17, 9], [18, 16], [29, 16]],
-			[[34, 28], [48, 24], [59, 33], [46, 64]],
-			[[69, 45], [86, 59], [96, 80], [150, 106]]
-		])
-		self.nl = len(anchors)
 		self.na = len(anchors[0])
+		self.nl = len(anchors)
+		self.img_size = img_size
 		a = anchors.copy().astype(np.float32)
 		a = a.reshape(self.nl, -1, 2)
 		self.anchors = a.copy()
 		self.anchor_grid = a.copy().reshape(self.nl, 1, -1, 1, 1, 2)
 
 	def detect(self, img):
-		shape_orig_WH = (img.shape[1], img.shape[0])
-		resized = self.pre_process(img)
-		outputs = self.inference(resized)
+		# resized = self.pre_process(img)
+		# cv2.imwrite('/home/yousixia/project/yolov3/runs/detect/tmp/trt_infer.jpg', resized.transpose(1,2,0))
+		outputs = self.inference(img)
 		# reshape from flat to (1, 3, x, y, 85)
 		reshaped = []
 		for output, shape in zip(outputs, self.output_shapes):
 			reshaped.append(output.reshape(shape))
-		return reshaped
+		output = self.post_process(reshaped, 0.4)
+		return output
+
 
 	def pre_process(self, img):
+		INPUT_W = 640
+		INPUT_H = 480
 		print('original image shape', img.shape)
-		img = cv2.resize(img, (640, 640))
-		img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-		# img = img.transpose((2, 0, 1)).astype(np.float16)
-		img = img.transpose((2, 0, 1)).astype(np.float32)
-		img /= 255.0
-		return img
+		image_raw = img
+		h, w, c = image_raw.shape
+		# 计算最小填充比例
+		r_w = INPUT_W / w
+		r_h = INPUT_H / h
+		if r_h > r_w:
+			tw = INPUT_W
+			th = int(r_w * h)
+			tx1 = tx2 = 0
+			ty1 = int((INPUT_H - th) / 2)
+			ty2 = INPUT_H - th - ty1
+		else:
+			tw = int(r_h * w)
+			th = INPUT_H
+			tx1 = int((INPUT_W - tw) / 2)
+			tx2 = INPUT_W - tw - tx1
+			ty1 = ty2 = 0
+		# 按比例缩放
+		image = cv2.resize(image_raw, (tw, th))
+		# 填充到目标大小
+		image = cv2.copyMakeBorder(
+			image, ty1, ty2, tx1, tx2, cv2.BORDER_CONSTANT, (128, 128, 128))
+		image = image.astype(np.float32)
+		image = image[:, :, ::-1].transpose(2, 0, 1).astype(np.float32)
+		image /= 255.0
+		image = np.expand_dims(image, axis=0)
+		image = np.ascontiguousarray(image)
+		return image
 
 	def inference(self, img):
+		self.cfx.push()
 		# copy img to input memory
-		# self.inputs[0]['host'] = np.ascontiguousarray(img)
+		np.copyto(self.inputs[0]['host'], img.ravel())
 		self.inputs[0]['host'] = np.ravel(img)
 		# transfer data to the gpu
-		for inp in self.inputs:
-			cuda.memcpy_htod_async(inp['device'], inp['host'], self.stream)
+		cuda.memcpy_htod_async(self.inputs[0]['device'], self.inputs[0]['host'], self.stream)
 		# run inference
+		# print('开始推理')
 		start = time.time()
-		self.context.execute_async_v2(
+		self.context.execute_async(
 			bindings=self.bindings,
 			stream_handle=self.stream.handle)
 		# fetch outputs from gpu
@@ -94,7 +114,9 @@ class Processor():
 			cuda.memcpy_dtoh_async(out['host'], out['device'], self.stream)
 		# synchronize stream
 		self.stream.synchronize()
+		self.cfx.pop()
 		end = time.time()
+		# print('推理结束')
 		print('execution time:', end - start)
 		return [out['host'] for out in self.outputs]
 
@@ -145,12 +167,12 @@ class Processor():
 			out[..., 2:4] = (out[..., 2:4] * 2) ** 2 * anchor
 
 			out[..., 5:] = out[..., 4:5] * out[..., 5:]
-			out = out.reshape((1, 4 * width * height, self.no))
+			out = out.reshape((1, self.na * width * height, self.no))
 			z.append(out)
 		pred = np.concatenate(z, 1)
 		xc = pred[..., 4] > conf_thres
 		pred = pred[xc]
-		boxes = self.xywh2xyxy(pred[:, :4])
+		boxes = self.xywh2xyxy(pred[..., :4])
 		return boxes.round()
 
 	def post_process(self, outputs, conf_thres=0.5):
@@ -199,7 +221,7 @@ class Processor():
 		ny_vec = np.arange(ny)
 		yv, xv = np.meshgrid(ny_vec, nx_vec)
 		grid = np.stack((yv, xv), axis=2)
-		grid = grid.reshape(1, 1, ny, nx, 2)
+		grid = grid.reshape(1, 1, nx, ny, 2)
 		return grid
 
 	def sigmoid(self, x):
@@ -211,6 +233,9 @@ class Processor():
 	def exponential_v(self, array):
 		return np.exp(array)
 
+	def center_point(self, boxes):
+		return [(boxes[2] - boxes[0])/2, (boxes[3] - boxes[1])/2]
+
 	def non_max_suppression(self, boxes, confs, classes, iou_thres=0.6):
 		x1 = boxes[:, 0]
 		y1 = boxes[:, 1]
@@ -219,6 +244,7 @@ class Processor():
 		areas = (x2 - x1 + 1) * (y2 - y1 + 1)
 		order = confs.flatten().argsort()[::-1]
 		keep = []
+		outputs = []
 		while order.size > 0:
 			i = order[0]
 			keep.append(i)
@@ -232,10 +258,17 @@ class Processor():
 			ovr = inter / (areas[i] + areas[order[1:]] - inter)
 			inds = np.where(ovr <= iou_thres)[0]
 			order = order[inds + 1]
-		boxes = boxes[keep]
-		confs = confs[keep]
-		classes = classes[keep]
-		return boxes, confs, classes
+			outputs.append(list(np.concatenate(
+				(boxes[i], confs[i],
+				 np.array([classes[i]]),
+				 np.array(self.center_point(boxes[i])))
+			)))
+		# each output in outputs contains [x1,y1,x2,y2,conf,cls,center_x,center_y]
+		outputs = np.array(outputs).reshape((-1, 8))
+		# boxes = boxes[keep]
+		# confs = confs[keep]
+		# classes = classes[keep]
+		return [outputs]
 
 	def nms(self, pred, iou_thres=0.6):
 		boxes = self.xywh2xyxy(pred[..., 0:4])

@@ -23,6 +23,7 @@ from tqdm import tqdm
 from utils.general import check_requirements, xyxy2xywh, xywh2xyxy, xywhn2xyxy, xyn2xy, segment2box, segments2boxes, \
     resample_segments, clean_str
 from utils.torch_utils import torch_distributed_zero_first
+from utils.inference.yolov5_trt import preprocess_image, detect_preprocess_image
 
 # Parameters
 help_url = 'https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data'
@@ -118,7 +119,6 @@ class _RepeatSampler(object):
         while True:
             yield from iter(self.sampler)
 
-
 def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
     # Resize and pad image while meeting stride-multiple constraints
     shape = img.shape[:2]  # current shape [height, width]
@@ -148,8 +148,43 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
         img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+    img = cv2.copyMakeBorder(img, top, bottom, left, right,
+                             cv2.BORDER_CONSTANT, value=color)  # add border
     return img, ratio, (dw, dh)
+
+def process_img(img0, new_shape=(640, 640), color=(114, 114, 114)):
+    # Resize and pad image while meeting strict input img-size when inference with tensorrt.
+    input_w = new_shape[0]
+    input_h = new_shape[1]
+    # print('original image shape', img0.shape)
+    image_raw = img0
+    h, w, c = image_raw.shape
+    # 计算最小填充比例
+    r_w = input_w / w
+    r_h = input_h / h
+    if r_h > r_w:
+        tw = input_w
+        th = int(r_w * h)
+        tx1 = tx2 = 0
+        ty1 = int((input_h - th) / 2)
+        ty2 = input_h - th - ty1
+    else:
+        tw = int(r_h * w)
+        th = input_h
+        tx1 = int((input_w - tw) / 2)
+        tx2 = input_w - tw - tx1
+        ty1 = ty2 = 0
+    # 按比例缩放
+    image = cv2.resize(image_raw, (tw, th))
+    # 填充到目标大小
+    image = cv2.copyMakeBorder(
+        image, ty1, ty2, tx1, tx2, cv2.BORDER_CONSTANT, color)
+    image = image.astype(np.float32)
+    image = image[:, :, ::-1].transpose(2, 0, 1).astype(np.float32)
+    image /= 255.0
+    image = np.expand_dims(image, axis=0)
+    image = np.ascontiguousarray(image)
+    return image
 
 
 class LoadImages:  # for inference
@@ -228,11 +263,78 @@ class LoadImages:  # for inference
         return self.nf  # number of files
 
 
+class LoadImagesTrt(LoadImages):  # for tensorrt inference
+    def __init__(self, path, img_size=[640, 480]):
+        # img_size in tensorrt must be fixed.
+        assert len(img_size) == 2 and (isinstance(img_size, tuple) or isinstance(img_size, list)), \
+            'img_size must be a list or tuple with length 2,means [width, height].'
+        super(LoadImagesTrt, self).__init__(path, img_size=img_size)
+
+    def __next__(self):
+        if self.count == self.nf:
+            raise StopIteration
+        path = self.files[self.count]
+
+        if self.video_flag[self.count]:
+            # Read video
+            self.mode = 'video'
+            ret_val, img0 = self.cap.read()
+            if not ret_val:
+                self.count += 1
+                self.cap.release()
+                if self.count == self.nf:  # last video
+                    raise StopIteration
+                else:
+                    path = self.files[self.count]
+                    self.new_video(path)
+                    ret_val, img0 = self.cap.read()
+
+            self.frame += 1
+            print(f'video {self.count + 1}/{self.nf} ({self.frame}/{self.nframes}) {path}: ', end='')
+
+        else:
+            # Read image
+            self.count += 1
+            img0 = cv2.imread(path)  # BGR
+            assert img0 is not None, 'Image Not Found ' + path
+            print(f'image {self.count}/{self.nf} {path}: ', end='')
+
+        # Padded, convert and resize
+        img = process_img(img0, self.img_size)
+
+        return path, img, img0, self.cap
+
+
 class LoadImagesStrided(LoadImages):
     # Resize and pad image to meet the stride-multiple constraints
     def __init__(self, path, img_size=640, stride=32):
-        super(LoadImagesStrided, self).__init__(path, img_size=640)
+        p = str(Path(path).absolute())  # os-agnostic absolute path
+        if '*' in p:
+            files = sorted(glob.glob(p, recursive=True))  # glob
+        elif os.path.isdir(p):
+            files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+        elif os.path.isfile(p):
+            files = [p]  # files
+        else:
+            raise Exception(f'ERROR: {p} does not exist')
+
+        images = [x for x in files if x.split('.')[-1].lower() in img_formats]
+        videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
+        ni, nv = len(images), len(videos)
+
+        self.img_size = img_size
         self.stride = stride
+        self.files = images + videos
+        self.nf = ni + nv  # number of files
+        self.video_flag = [False] * ni + [True] * nv
+        self.mode = 'image'
+        if any(videos):
+            self.new_video(videos[0])  # new video
+        else:
+            self.cap = None
+        assert self.nf > 0, f'No images or videos found in {p}. ' \
+                            f'Supported formats are:\nimages: {img_formats}\nvideos: {vid_formats}'
+
 
     def __next__(self):
         if self.count == self.nf:
@@ -321,16 +423,55 @@ class LoadWebcam:  # for inference
         img = img0[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        return img_path, img0, img0, None
+        return img_path, img, img0, None
 
     def __len__(self):
         return 0
 
 
+class LoadWebcamTrt(LoadWebcam):  # for tensorrt inference
+    def __init__(self, pipe='0', img_size=[640, 480]):
+        # img_size in tensorrt must be fixed.
+        assert len(img_size) == 2 and (isinstance(img_size, tuple) or isinstance(img_size, list)), \
+            'img_size must be a list or tuple with length 2,means [width, height].'
+        super(LoadWebcamTrt, self).__init__(sources, img_size)
+
+    def __next__(self):
+        self.count += 1
+        if cv2.waitKey(1) == ord('q'):  # q to quit
+            self.cap.release()
+            cv2.destroyAllWindows()
+            raise StopIteration
+
+        # Read frame
+        if self.pipe == 0:  # local camera
+            ret_val, img0 = self.cap.read()
+            img0 = cv2.flip(img0, 1)  # flip left-right
+        else:  # IP camera
+            n = 0
+            while True:
+                n += 1
+                self.cap.grab()
+                if n % 30 == 0:  # skip frames
+                    ret_val, img0 = self.cap.retrieve()
+                    if ret_val:
+                        break
+
+        # Print
+        assert ret_val, f'Camera Error {self.pipe}'
+        img_path = 'webcam.jpg'
+        print(f'webcam {self.count}: ', end='')
+
+        # Padded, convert and resize
+        img = process_img(img0, self.img_size)
+
+        return img_path, img, img0, None
+
+
 class LoadWebcamStrided(LoadWebcam):
     # Resize and pad image to meet the stride-multiple constraints
-    def __init__(self, pipe='0', img_size=640, stride=32):
-        super(LoadWebcamStrided, self).__init__(pipe, img_size)
+    def __init__(self, sources='streams.txt', img_size=640, stride=32):
+        super(LoadWebcamStrided, self).__init__(sources, img_size)
         self.stride = stride
 
     def __next__(self):
@@ -363,14 +504,13 @@ class LoadWebcamStrided(LoadWebcam):
         img = letterbox(img0, self.img_size, stride=self.stride)[0]
 
         # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-        img = np.ascontiguousarray(img)
+        img = preprocess_image(img0)
 
         return img_path, img, img0, None
 
 
 class LoadStreams:  # multiple IP or RTSP cameras
-    def __init__(self, sources='streams.txt', img_size=640, check_func=None):
+    def __init__(self, sources='streams.txt', img_size=640):
         self.mode = 'stream'
         self.img_size = img_size
 
@@ -403,26 +543,10 @@ class LoadStreams:  # multiple IP or RTSP cameras
             thread.start()
         print('')  # newline
         # check for common shapes
-        s = np.stack([self.common_shape_check(x, check_func).shape for x in self.imgs], 0)  # shapes
+        s = np.stack([x.shape for x in self.imgs], 0)  # shapes
         self.rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
         if not self.rect:
             print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
-
-    def common_shape_check(self, img, check_func):
-        """
-        Choose a function to resize and pad image and return it.Check for common shapes
-        Parameters
-        ----------
-        img
-        check_func: Could be None or a funtion
-
-        Returns Image after processing
-        -------
-
-        """
-        if check_func is None:
-            return img
-        return check_func(img, self.img_size, stride=self.stride)[0]
 
     def update(self, index, cap):
         # Read next stream frame in a daemon thread
@@ -437,6 +561,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
                 n = 0
             time.sleep(1 / self.fps)  # wait time
 
+
     def __iter__(self):
         self.count = -1
         return self
@@ -447,6 +572,9 @@ class LoadStreams:  # multiple IP or RTSP cameras
         if cv2.waitKey(1) == ord('q'):  # q to quit
             cv2.destroyAllWindows()
             raise StopIteration
+
+        # Letterbox
+        img0 = self.imgs.copy()
 
         # Stack
         img = np.stack(img0, 0)
@@ -461,13 +589,48 @@ class LoadStreams:  # multiple IP or RTSP cameras
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
-class LoadStreamsStrided(LoadStreams):
-    def __init__(self, sources='streams.txt', img_size=640, check_func=letterbox, stride=32):
-        self.stride = stride
-        self.check_func = check_func
-        super(LoadStreamsStrided, self).__init__(
-            sources='streams.txt', img_size=640, check_func=check_func)
+class LoadStreamsTrt(LoadStreams):  # multiple IP or RTSP cameras
+    def __init__(self, sources='streams.txt', img_size=[640, 480]):
+        # img_size in tensorrt must be fixed.
+        assert len(img_size) == 2 and (isinstance(img_size, tuple) or isinstance(img_size, list)), \
+            'img_size must be a list or tuple with length 2,means [width, height].'
+        def __init__(self, sources='streams.txt', img_size=640):
+            self.mode = 'stream'
+        self.img_size = img_size
 
+        if os.path.isfile(sources):
+            with open(sources, 'r') as f:
+                sources = [x.strip() for x in f.read().strip().splitlines() if len(x.strip())]
+        else:
+            sources = [sources]
+
+        n = len(sources)
+        self.imgs = [None] * n
+        self.sources = [clean_str(x) for x in sources]  # clean source names for later
+        for i, s in enumerate(sources):
+            # Start the thread to read frames from the video stream
+            print(f'{i + 1}/{n}: {s}... ', end='')
+            url = eval(s) if s.isnumeric() else s
+            if 'youtube.com/' in url or 'youtu.be/' in url:  # if source is YouTube video
+                check_requirements(('pafy', 'youtube_dl'))
+                import pafy
+                url = pafy.new(url).getbest(preftype="mp4").url
+            cap = cv2.VideoCapture(url)
+            assert cap.isOpened(), f'Failed to open {s}'
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.fps = cap.get(cv2.CAP_PROP_FPS) % 100
+
+            _, self.imgs[i] = cap.read()  # guarantee first frame
+            thread = Thread(target=self.update, args=([i, cap]), daemon=True)
+            print(f' success ({w}x{h} at {self.fps:.2f} FPS).')
+            thread.start()
+        print('')  # newline
+        # check for common shapes
+        s = np.stack([process_img(x, self.img_size).shape for x in self.imgs], 0)  # shapes
+        self.rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
+        if not self.rect:
+            print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
 
     def __next__(self):
         self.count += 1
@@ -477,7 +640,66 @@ class LoadStreamsStrided(LoadStreams):
             raise StopIteration
 
         # Letterbox
-        img = [self.check_func(x, self.img_size, auto=self.rect, stride=self.stride)[0] for x in img0]
+        img0 = self.imgs.copy()
+        img = [process_img(x) for x in img0]
+
+        # Stack
+        img = np.stack(img, 0)
+
+        return self.sources, img, img0, None
+
+
+class LoadStreamsStrided(LoadStreams):
+    def __init__(self, sources='streams.txt', img_size=640, stride=32):
+        self.mode = 'stream'
+        self.img_size = img_size
+        self.stride = stride
+
+        if os.path.isfile(sources):
+            with open(sources, 'r') as f:
+                sources = [x.strip() for x in f.read().strip().splitlines() if len(x.strip())]
+        else:
+            sources = [sources]
+
+        n = len(sources)
+        self.imgs, self.fps, self.frames, self.threads = [None] * n, [0] * n, [0] * n, [None] * n
+        self.sources = [clean_str(x) for x in sources]  # clean source names for later
+        for i, s in enumerate(sources):  # index, source
+            # Start thread to read frames from video stream
+            print(f'{i + 1}/{n}: {s}... ', end='')
+            if 'youtube.com/' in s or 'youtu.be/' in s:  # if source is YouTube video
+                check_requirements(('pafy', 'youtube_dl'))
+                import pafy
+                s = pafy.new(s).getbest(preftype="mp4").url  # YouTube URL
+            s = eval(s) if s.isnumeric() else s  # i.e. s = '0' local webcam
+            cap = cv2.VideoCapture(s)
+            assert cap.isOpened(), f'Failed to open {s}'
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.fps[i] = max(cap.get(cv2.CAP_PROP_FPS) % 100, 0) or 30.0  # 30 FPS fallback
+            self.frames[i] = max(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), 0) or float('inf')  # infinite stream fallback
+
+            _, self.imgs[i] = cap.read()  # guarantee first frame
+            self.threads[i] = Thread(target=self.update, args=([i, cap]), daemon=True)
+            print(f" success ({self.frames[i]} frames {w}x{h} at {self.fps[i]:.2f} FPS)")
+            self.threads[i].start()
+        print('')  # newline
+
+        # check for common shapes
+        s = np.stack([letterbox(x, self.img_size, stride=self.stride)[0].shape for x in self.imgs], 0)  # shapes
+        self.rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
+        if not self.rect:
+            print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
+
+    def __next__(self):
+        self.count += 1
+        img0 = self.imgs.copy()
+        if cv2.waitKey(1) == ord('q'):  # q to quit
+            cv2.destroyAllWindows()
+            raise StopIteration
+
+        # Letterbox
+        img = [letterbox(x, self.img_size, auto=self.rect, stride=self.stride)[0] for x in img0]
 
         # Stack
         img = np.stack(img, 0)
@@ -487,7 +709,6 @@ class LoadStreamsStrided(LoadStreams):
         img = np.ascontiguousarray(img)
 
         return self.sources, img, img0, None
-
 
 
 def img2label_paths(img_paths):
