@@ -234,7 +234,7 @@ class Processor():
 		return np.exp(array)
 
 	def center_point(self, boxes):
-		return [(boxes[2] - boxes[0])/2, (boxes[3] - boxes[1])/2]
+		return [boxes[0] + (boxes[2] - boxes[0])/2, boxes[1] + (boxes[3] - boxes[1])/2]
 
 	def non_max_suppression(self, boxes, confs, classes, iou_thres=0.6):
 		x1 = boxes[:, 0]

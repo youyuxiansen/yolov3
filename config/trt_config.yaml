@@ -1,0 +1,18 @@
+yolov5s:
+  anchor_nums: 3
+  nc: 1
+  anchors:
+    - [[10, 13], [16, 30], [33, 23]]  # P3/8
+    - [[30, 61], [62, 45], [59, 119]]  # P4/16
+    - [[116, 90], [156, 198], [373, 326]]
+
+  strides: np.array([8., 16., 32.])
+  output_shapes:
+    - [1, 3, 60, 80, 6] # 6 means 5 + "nc"
+    - [1, 3, 30, 40, 6]
+    - [1, 3, 15, 20, 6]
+#    - [1, "{{ anchor_nums }}", 60, 80, "5 + {{nc}}"] # 6 means 5 + "nc"
+#    - [1, "{{ anchor_nums }}", 30, 40, "5 + {{nc}}"]
+#    - [1, "{{ anchor_nums }}", 15, 20, "5 + {{nc}}"]
+  weights: /home/yousixia/project/yolov3/runs/train/exp14/weights/best_175.trt
+  imgsz: [640, 480]

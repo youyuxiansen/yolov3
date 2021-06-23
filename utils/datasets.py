@@ -24,6 +24,7 @@ from utils.general import check_requirements, xyxy2xywh, xywh2xyxy, xywhn2xyxy, 
     resample_segments, clean_str
 from utils.torch_utils import torch_distributed_zero_first
 from utils.inference.yolov5_trt import preprocess_image, detect_preprocess_image
+from .amicro_plot import four_point_transform
 
 # Parameters
 help_url = 'https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data'
@@ -119,6 +120,7 @@ class _RepeatSampler(object):
         while True:
             yield from iter(self.sampler)
 
+
 def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
     # Resize and pad image while meeting stride-multiple constraints
     shape = img.shape[:2]  # current shape [height, width]
@@ -151,6 +153,7 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
     img = cv2.copyMakeBorder(img, top, bottom, left, right,
                              cv2.BORDER_CONSTANT, value=color)  # add border
     return img, ratio, (dw, dh)
+
 
 def process_img(img0, new_shape=(640, 640), color=(114, 114, 114)):
     # Resize and pad image while meeting strict input img-size when inference with tensorrt.
@@ -264,11 +267,14 @@ class LoadImages:  # for inference
 
 
 class LoadImagesTrt(LoadImages):  # for tensorrt inference
-    def __init__(self, path, img_size=[640, 480]):
+    def __init__(self, path, img_size=[640, 480],
+                 bird_transform=False, pts=None):
         # img_size in tensorrt must be fixed.
         assert len(img_size) == 2 and (isinstance(img_size, tuple) or isinstance(img_size, list)), \
             'img_size must be a list or tuple with length 2,means [width, height].'
         super(LoadImagesTrt, self).__init__(path, img_size=img_size)
+        self.bird_transform = bird_transform
+        self.pts = pts
 
     def __next__(self):
         if self.count == self.nf:
@@ -299,6 +305,8 @@ class LoadImagesTrt(LoadImages):  # for tensorrt inference
             assert img0 is not None, 'Image Not Found ' + path
             print(f'image {self.count}/{self.nf} {path}: ', end='')
 
+        if self.bird_transform and self.pts is not None:
+            img0 = four_point_transform(img0, self.pts)
         # Padded, convert and resize
         img = process_img(img0, self.img_size)
 
@@ -434,7 +442,7 @@ class LoadWebcamTrt(LoadWebcam):  # for tensorrt inference
         # img_size in tensorrt must be fixed.
         assert len(img_size) == 2 and (isinstance(img_size, tuple) or isinstance(img_size, list)), \
             'img_size must be a list or tuple with length 2,means [width, height].'
-        super(LoadWebcamTrt, self).__init__(sources, img_size)
+        super(LoadWebcamTrt, self).__init__(pipe, img_size)
 
     def __next__(self):
         self.count += 1
@@ -590,13 +598,15 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
 
 class LoadStreamsTrt(LoadStreams):  # multiple IP or RTSP cameras
-    def __init__(self, sources='streams.txt', img_size=[640, 480]):
+    def __init__(self, sources='streams.txt', img_size=[640, 480],
+                 bird_transform=False, pts=None):
         # img_size in tensorrt must be fixed.
         assert len(img_size) == 2 and (isinstance(img_size, tuple) or isinstance(img_size, list)), \
             'img_size must be a list or tuple with length 2,means [width, height].'
-        def __init__(self, sources='streams.txt', img_size=640):
-            self.mode = 'stream'
+        self.mode = 'stream'
         self.img_size = img_size
+        self.bird_transform = bird_transform
+        self.pts = pts
 
         if os.path.isfile(sources):
             with open(sources, 'r') as f:
@@ -622,6 +632,8 @@ class LoadStreamsTrt(LoadStreams):  # multiple IP or RTSP cameras
             self.fps = cap.get(cv2.CAP_PROP_FPS) % 100
 
             _, self.imgs[i] = cap.read()  # guarantee first frame
+            if self.bird_transform and self.pts is not None:
+                self.imgs[i] = four_point_transform(self.imgs[i], self.pts)
             thread = Thread(target=self.update, args=([i, cap]), daemon=True)
             print(f' success ({w}x{h} at {self.fps:.2f} FPS).')
             thread.start()

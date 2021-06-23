@@ -1,0 +1,18 @@
+
+syntax = "proto3";
+package namespaceUploadpic;
+service uploadPicServicer {
+	rpc Upload(MatImage) returns (Reply) {}
+}
+
+message MatImage
+{
+	int32 rows = 1;
+	int32 cols = 2;
+	int32 elt_type = 3;
+	int32 elt_size = 4;
+	bytes mat_data = 5;
+}
+message Reply {
+	repeated int32 Bbox = 1;
+}

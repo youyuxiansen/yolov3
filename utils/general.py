@@ -324,25 +324,31 @@ def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     else:
         gain = ratio_pad[0][0]
         pad = ratio_pad[1]
-
-    coords[:, [0, 2]] -= pad[0]  # x padding
-    coords[:, [1, 3]] -= pad[1]  # y padding
-    coords[:, :4] /= gain
+    # find even index（represents x）and non-even index（represents y）
+    even_coords = [x for x in range(len(coords[0, :])) if x % 2 == 0]
+    noneven_coords = [x for x in range(len(coords[0, :])) if x % 2 != 0]
+    coords[:, even_coords] -= pad[0]  # x padding
+    coords[:, noneven_coords] -= pad[1]  # y padding
+    coords[:, :] /= gain
     clip_coords(coords, img0_shape)
     return coords
 
+
 def clip_coords(boxes, img_shape):
     # Clip bounding xyxy bounding boxes to image shape (height, width)
-    if isinstance(boxes, torch.Tensor):
-        boxes[:, 0].clamp_(0, img_shape[1])  # x1
-        boxes[:, 1].clamp_(0, img_shape[0])  # y1
-        boxes[:, 2].clamp_(0, img_shape[1])  # x2
-        boxes[:, 3].clamp_(0, img_shape[0])  # y2
-    elif isinstance(boxes, np.ndarray):
-        boxes[:, 0] = np.clip(boxes[:, 0], 0, img_shape[1])
-        boxes[:, 1] = np.clip(boxes[:, 1], 0, img_shape[0])
-        boxes[:, 2] = np.clip(boxes[:, 2], 0, img_shape[1])
-        boxes[:, 3] = np.clip(boxes[:, 3], 0, img_shape[0])
+    # find even index（represents x）and non-even index（represents y）
+    even_coords = [x for x in range(len(boxes[0, :])) if x%2==0]
+    noneven_coords = [x for x in range(len(boxes[0, :])) if x%2!=0]
+    for i in even_coords:
+        if isinstance(boxes, torch.Tensor):
+            boxes[:, i].clamp_(0, img_shape[1])  # x1
+        elif isinstance(boxes, np.ndarray):
+            boxes[:, i] = np.clip(boxes[:, i], 0, img_shape[1])
+    for i in noneven_coords:
+        if isinstance(boxes, torch.Tensor):
+            boxes[:, i].clamp_(0, img_shape[0])  # y1
+        elif isinstance(boxes, np.ndarray):
+            boxes[:, i] = np.clip(boxes[:, i], 0, img_shape[0])
 
 
 def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):

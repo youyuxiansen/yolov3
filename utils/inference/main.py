@@ -2,8 +2,8 @@ import argparse
 import cv2
 import numpy as np
 
-from inference import Processor
-from inference import Visualizer
+from .Processor import Processor
+from .Visualizer import Visualizer
 
 
 # from utils.inference.Processor import Processor
