@@ -23,21 +23,16 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 
 class UploadPicServicer(uploadPic_pb2_grpc.uploadPicServicerServicer):
-	def __init__(self, weights, anchor_nums, nc, anchors, output_shapes, imgsz):
-		self.weights = weights
-		self.anchor_nums = anchor_nums
-		self.nc = nc
-		self.anchors = anchors
-		self.output_shapes = output_shapes
+	def __init__(self, processor, imgsz):
+		self.processor = processor
 		self.imgsz = imgsz
 
 	# 工作函数
 	def Upload(self, request, context):
-		img0 = np.frombuffer(request.mat_data, dtype=np.uint8).reshape(request.cols, request.rows, request.elt_size)  # h, w, c
-		# cv2.imwrite('/home/yousixia/project/yolov3/runs/detect/tmp/nparr.jpg', nparr)
+		img0 = np.frombuffer(request.mat_data, dtype=np.uint8).reshape(request.rows, request.cols, request.channels)  # h, w, c
+		cv2.imwrite('/home/yousixia/project/yolov3/runs/detect/tmp/nparr.jpg', img0)
 		img = process_img(img0, self.imgsz)
-		processor = Processor(self.weights, self.anchor_nums, self.nc, np.array(self.anchors), np.array(self.output_shapes), self.imgsz)
-		pred = processor.detect(img)
+		pred = self.processor.detect(img)
 		bbox = []  # xywh
 		for _, det in enumerate(pred):  # detections per image
 			if len(det):
@@ -53,16 +48,20 @@ class UploadPicServicer(uploadPic_pb2_grpc.uploadPicServicerServicer):
 
 
 def serve(opt):
+	processor = Processor(opt.data_dict.get('weights'),
+	                      opt.data_dict.get('anchor_nums'),
+	                      opt.data_dict.get('nc'),
+	                      np.array(opt.data_dict.get('anchors')),
+	                      np.array(opt.data_dict.get('output_shapes')),
+	                      opt.data_dict.get('imgsz'))
 	# gRPC 服务器
-	server = grpc.server(futures.ThreadPoolExecutor(max_workers=10), options=[
-		('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-		('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)])
+	server = grpc.server(futures.ThreadPoolExecutor(max_workers=10),
+	                     options=[
+		                     ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+		                     ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
+	                     ])
 	uploadPic_pb2_grpc.add_uploadPicServicerServicer_to_server(UploadPicServicer(
-		opt.data_dict.get('weights'),
-		opt.data_dict.get('anchor_nums'),
-		opt.data_dict.get('nc'),
-		opt.data_dict.get('anchors'),
-		opt.data_dict.get('output_shapes'),
+		processor,
 		opt.data_dict.get('imgsz')
 	), server)
 	server.add_insecure_port('[::]:' + str(opt.port))

@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0fuploadPic.proto\x12\x12namespaceUploadpic\"\\\n\x08MatImage\x12\x0c\n\x04rows\x18\x01 \x01(\x05\x12\x0c\n\x04\x63ols\x18\x02 \x01(\x05\x12\x10\n\x08\x65lt_type\x18\x03 \x01(\x05\x12\x10\n\x08\x65lt_size\x18\x04 \x01(\x05\x12\x10\n\x08mat_data\x18\x05 \x01(\x0c\"\x15\n\x05Reply\x12\x0c\n\x04\x42\x62ox\x18\x01 \x03(\x05\x32X\n\x11uploadPicServicer\x12\x43\n\x06Upload\x12\x1c.namespaceUploadpic.MatImage\x1a\x19.namespaceUploadpic.Reply\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\x0fuploadPic.proto\x12\x12namespaceUploadpic\"\\\n\x08MatImage\x12\x0c\n\x04rows\x18\x01 \x01(\x05\x12\x0c\n\x04\x63ols\x18\x02 \x01(\x05\x12\x10\n\x08\x65lt_type\x18\x03 \x01(\x05\x12\x10\n\x08\x63hannels\x18\x04 \x01(\x05\x12\x10\n\x08mat_data\x18\x05 \x01(\x0c\"\x15\n\x05Reply\x12\x0c\n\x04\x42\x62ox\x18\x01 \x03(\x05\x32X\n\x11uploadPicServicer\x12\x43\n\x06Upload\x12\x1c.namespaceUploadpic.MatImage\x1a\x19.namespaceUploadpic.Reply\"\x00\x62\x06proto3'
 )
 
 
@@ -55,7 +55,7 @@ _MATIMAGE = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='elt_size', full_name='namespaceUploadpic.MatImage.elt_size', index=3,
+      name='channels', full_name='namespaceUploadpic.MatImage.channels', index=3,
       number=4, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,

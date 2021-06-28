@@ -18,7 +18,7 @@ from utils.general import check_img_size, check_requirements, \
 	scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
 from utils.plots import plot_one_box, plot_center_point, plot_move_routes, \
 	one_cover_two_with_mask
-from utils import four_point_transform
+from utils.amicro_plot import four_point_transform
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 from utils.inference import Processor

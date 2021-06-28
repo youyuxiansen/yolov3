@@ -117,7 +117,7 @@ class Processor():
 		self.cfx.pop()
 		end = time.time()
 		# print('推理结束')
-		print('execution time:', end - start)
+		print('Inference time:', end - start)
 		return [out['host'] for out in self.outputs]
 
 	def extract_object_grids(self, output):
