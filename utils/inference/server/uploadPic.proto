@@ -12,6 +12,7 @@ message MatImage
 	int32 elt_type = 3;
 	int32 channels = 4;
 	bytes mat_data = 5;
+	int32 id = 6;
 }
 message Reply {
 	repeated int32 Bbox = 1;

@@ -18,7 +18,7 @@ from utils.inference import Processor
 from utils.general import scale_coords, xyxy2xywh
 from utils.datasets import process_img
 # 设置最大传输字节数
-MAX_MESSAGE_LENGTH = 2147483647
+MAX_MESSAGE_LENGTH = 21474836
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 
@@ -33,7 +33,7 @@ class UploadPicServicer(uploadPic_pb2_grpc.uploadPicServicerServicer):
 		cv2.imwrite('/home/yousixia/project/yolov3/runs/detect/tmp/nparr.jpg', img0)
 		img = process_img(img0, self.imgsz)
 		pred = self.processor.detect(img)
-		bbox = []  # xywh
+		bbox = [request.id]  # return [id, xywh, xywh, ...]
 		for _, det in enumerate(pred):  # detections per image
 			if len(det):
 				# Rescale boxes from img_size to im0 size
