@@ -19,6 +19,11 @@ class uploadPicServicerStub(object):
                 request_serializer=uploadPic__pb2.MatImage.SerializeToString,
                 response_deserializer=uploadPic__pb2.Reply.FromString,
                 )
+        self.GetBbox = channel.unary_unary(
+                '/namespaceUploadpic.uploadPicServicer/GetBbox',
+                request_serializer=uploadPic__pb2.MatImage.SerializeToString,
+                response_deserializer=uploadPic__pb2.Reply.FromString,
+                )
 
 
 class uploadPicServicerServicer(object):
@@ -30,11 +35,22 @@ class uploadPicServicerServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetBbox(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_uploadPicServicerServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Upload': grpc.unary_unary_rpc_method_handler(
                     servicer.Upload,
+                    request_deserializer=uploadPic__pb2.MatImage.FromString,
+                    response_serializer=uploadPic__pb2.Reply.SerializeToString,
+            ),
+            'GetBbox': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBbox,
                     request_deserializer=uploadPic__pb2.MatImage.FromString,
                     response_serializer=uploadPic__pb2.Reply.SerializeToString,
             ),
@@ -60,6 +76,23 @@ class uploadPicServicer(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/namespaceUploadpic.uploadPicServicer/Upload',
+            uploadPic__pb2.MatImage.SerializeToString,
+            uploadPic__pb2.Reply.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def GetBbox(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/namespaceUploadpic.uploadPicServicer/GetBbox',
             uploadPic__pb2.MatImage.SerializeToString,
             uploadPic__pb2.Reply.FromString,
             options, channel_credentials,

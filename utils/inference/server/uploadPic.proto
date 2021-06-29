@@ -3,6 +3,7 @@ syntax = "proto3";
 package namespaceUploadpic;
 service uploadPicServicer {
 	rpc Upload(MatImage) returns (Reply) {}
+	rpc GetBbox(MatImage) returns (Reply) {}
 }
 
 message MatImage
@@ -13,7 +14,11 @@ message MatImage
 	int32 channels = 4;
 	bytes mat_data = 5;
 	int32 id = 6;
+	int32 video_id = 7;
 }
+
 message Reply {
 	repeated int32 Bbox = 1;
+	string message = 2;
+	bool request_state = 3;
 }

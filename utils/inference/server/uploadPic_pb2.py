@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0fuploadPic.proto\x12\x12namespaceUploadpic\"\\\n\x08MatImage\x12\x0c\n\x04rows\x18\x01 \x01(\x05\x12\x0c\n\x04\x63ols\x18\x02 \x01(\x05\x12\x10\n\x08\x65lt_type\x18\x03 \x01(\x05\x12\x10\n\x08\x63hannels\x18\x04 \x01(\x05\x12\x10\n\x08mat_data\x18\x05 \x01(\x0c\"\x15\n\x05Reply\x12\x0c\n\x04\x42\x62ox\x18\x01 \x03(\x05\x32X\n\x11uploadPicServicer\x12\x43\n\x06Upload\x12\x1c.namespaceUploadpic.MatImage\x1a\x19.namespaceUploadpic.Reply\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\x0fuploadPic.proto\x12\x12namespaceUploadpic\"z\n\x08MatImage\x12\x0c\n\x04rows\x18\x01 \x01(\x05\x12\x0c\n\x04\x63ols\x18\x02 \x01(\x05\x12\x10\n\x08\x65lt_type\x18\x03 \x01(\x05\x12\x10\n\x08\x63hannels\x18\x04 \x01(\x05\x12\x10\n\x08mat_data\x18\x05 \x01(\x0c\x12\n\n\x02id\x18\x06 \x01(\x05\x12\x10\n\x08video_id\x18\x07 \x01(\x05\"=\n\x05Reply\x12\x0c\n\x04\x42\x62ox\x18\x01 \x03(\x05\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x15\n\rrequest_state\x18\x03 \x01(\x08\x32\x9e\x01\n\x11uploadPicServicer\x12\x43\n\x06Upload\x12\x1c.namespaceUploadpic.MatImage\x1a\x19.namespaceUploadpic.Reply\"\x00\x12\x44\n\x07GetBbox\x12\x1c.namespaceUploadpic.MatImage\x1a\x19.namespaceUploadpic.Reply\"\x00\x62\x06proto3'
 )
 
 
@@ -68,6 +68,20 @@ _MATIMAGE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='id', full_name='namespaceUploadpic.MatImage.id', index=5,
+      number=6, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='video_id', full_name='namespaceUploadpic.MatImage.video_id', index=6,
+      number=7, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -81,7 +95,7 @@ _MATIMAGE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=39,
-  serialized_end=131,
+  serialized_end=161,
 )
 
 
@@ -100,6 +114,20 @@ _REPLY = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='message', full_name='namespaceUploadpic.Reply.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='request_state', full_name='namespaceUploadpic.Reply.request_state', index=2,
+      number=3, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -112,8 +140,8 @@ _REPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=133,
-  serialized_end=154,
+  serialized_start=163,
+  serialized_end=224,
 )
 
 DESCRIPTOR.message_types_by_name['MatImage'] = _MATIMAGE
@@ -143,13 +171,23 @@ _UPLOADPICSERVICER = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=156,
-  serialized_end=244,
+  serialized_start=227,
+  serialized_end=385,
   methods=[
   _descriptor.MethodDescriptor(
     name='Upload',
     full_name='namespaceUploadpic.uploadPicServicer.Upload',
     index=0,
+    containing_service=None,
+    input_type=_MATIMAGE,
+    output_type=_REPLY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='GetBbox',
+    full_name='namespaceUploadpic.uploadPicServicer.GetBbox',
+    index=1,
     containing_service=None,
     input_type=_MATIMAGE,
     output_type=_REPLY,
