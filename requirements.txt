@@ -31,4 +31,4 @@ thop  # FLOPS computation
 pycocotools>=2.0  # COCO mAP
 
 # server --------------------------------------
-grpc==1.38.0
+grpcio==1.38.0
