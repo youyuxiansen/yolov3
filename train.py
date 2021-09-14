@@ -49,6 +49,7 @@ def train(hyp, opt, device, tb_writer=None):
     last = wdir / 'last.pt'
     best = wdir / 'best.pt'
     results_file = save_dir / 'results.txt'
+    anchors_file = save_dir / 'anchors.txt'
 
     # Save run settings
     with open(save_dir / 'hyp.yaml', 'w') as f:
@@ -88,7 +89,8 @@ def train(hyp, opt, device, tb_writer=None):
         model = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
         exclude = ['anchor'] if (opt.cfg or hyp.get('anchors')) and not opt.resume else []  # exclude keys
         state_dict = ckpt['model'].float().state_dict()  # to FP32
-        state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
+        state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # Keep the weights the same as the model shape in the pt file, omitting the shape non-uniformity, and the layer weights in the exclude
+
         model.load_state_dict(state_dict, strict=False)  # load
         logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
     else:
@@ -159,6 +161,12 @@ def train(hyp, opt, device, tb_writer=None):
         # Results
         if ckpt.get('training_results') is not None:
             results_file.write_text(ckpt['training_results'])  # write results.txt
+
+        # write anchors.txt
+        # with open(anchors_file, 'a') as f:
+        #     f.write(s + '%10.4g' * 7 % results + '\n')
+        # m = model.model[-1]  # Detect() layer
+        # print(m.anchor_grid.squeeze())
 
         # Epochs
         start_epoch = ckpt['epoch'] + 1
@@ -292,7 +300,7 @@ def train(hyp, opt, device, tb_writer=None):
 
             # Multi-scale
             if opt.multi_scale:
-                sz = random.randrange(imgsz * 0.5, imgsz * 1.5 + gs) // gs * gs  # size
+                sz = random.randrange(imgsz * (1 - opt.multi_scale_thresh), imgsz * (1 + opt.multi_scale_thresh) + gs) // gs * gs  # size
                 sf = sz / max(imgs.shape[2:])  # scale factor
                 if sf != 1:
                     ns = [math.ceil(x * sf / gs) * gs for x in imgs.shape[2:]]  # new shape (stretched to gs-multiple)
@@ -473,6 +481,7 @@ if __name__ == '__main__':
     parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
+    parser.add_argument('--multi-scale-thresh', type=float, default=0.5, help='Threshhold of multi-scale')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
@@ -619,7 +628,7 @@ if __name__ == '__main__':
 
             # Write mutation results
             print_mutation(hyp.copy(), results, yaml_file, opt.bucket)
-            print("\nAccomplished evolve step %d" % num)
+            print(f"\nAccomplished evolve step %d" % num)
 
         # Plot results
         plot_evolution(yaml_file)

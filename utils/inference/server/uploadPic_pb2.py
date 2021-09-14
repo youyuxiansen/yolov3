@@ -10,7 +10,7 @@ from google.protobuf import symbol_database as _symbol_database
 
 _sym_db = _symbol_database.Default()
 
-
+from grpc_tools import protoc
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(

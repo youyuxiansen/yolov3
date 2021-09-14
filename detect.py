@@ -9,7 +9,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
 import numpy as np
-import matplotlib.pyplot as plt
+import yaml
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreamsStrided, LoadImagesStrided, LoadStreamsTrt, LoadImagesTrt
@@ -18,7 +18,6 @@ from utils.general import check_img_size, check_requirements, \
 	scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
 from utils.plots import plot_one_box, plot_center_point, plot_move_routes, \
 	one_cover_two_with_mask
-from utils.amicro_plot import four_point_transform
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 from utils.inference import Processor
@@ -26,37 +25,9 @@ import matplotlib.pyplot as plt
 
 
 def trt_detect(save_img=False):
-	# yolov3-ssp with evolve
-	# anchor_nums = 4
-	# nc = 1
-	# anchors = np.array([
-	#     [[11, 10], [17, 9], [18, 16], [29, 16]],
-	#     [[34, 28], [48, 24], [59, 33], [46, 64]],
-	#     [[69, 45], [86, 59], [96, 80], [150, 106]]
-	# ])
-	# output_shapes = [
-	#     (1, anchor_nums, 80, 80, nc + 5),
-	#     (1, anchor_nums, 40, 40, nc + 5),
-	#     (1, anchor_nums, 20, 20, nc + 5)
-	# ]
-
-	# yolov5s
-	anchor_nums = 3
-	nc = 1
-	anchors = np.array([
-		[[10, 13], [16, 30], [33, 23]],  # P3/8
-		[[30, 61], [62, 45], [59, 119]],  # P4/16
-		[[116, 90], [156, 198], [373, 326]]
-	])
-	strides = np.array([8., 16., 32.])
-	output_shapes = [
-		(1, anchor_nums, 60, 80, nc + 5),
-		(1, anchor_nums, 30, 40, nc + 5),
-		(1, anchor_nums, 15, 20, nc + 5)
-		# (1, anchor_nums*60*80, nc + 5),
-		# (1, anchor_nums*30*40, nc + 5),
-		# (1, anchor_nums*15*20, nc + 5)
-	]
+	with open(opt.yaml_path) as f:
+		data_dict = yaml.load(f, Loader=yaml.SafeLoader)
+		opt.data_dict = data_dict.get(opt.choose_config)
 
 	source, weights, view_img, save_txt, imgsz = \
 		opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
@@ -71,7 +42,8 @@ def trt_detect(save_img=False):
 	# Initialize
 	set_logging()
 
-	stride = int(strides.max())  # model stride
+	# stride = int(strides.max())
+	stride = int(np.array(opt.data_dict.get('strides')).max())  # model stride
 	print(f"Loading trt engine!")
 	# imgsz = check_img_size(imgsz, s=stride)  # check img_size
 
@@ -102,7 +74,13 @@ def trt_detect(save_img=False):
 	# Create an empty picture and draw the route on it, which is independent from the real picture.
 	route_mask = None
 	cover_heatmap_accum = None
-	processor = Processor(weights[0], anchor_nums, nc, anchors, output_shapes, imgsz)
+	processor = Processor(opt.data_dict.get('weights'),
+	                      opt.data_dict.get('anchor_nums'),
+	                      opt.data_dict.get('nc'),
+	                      np.array(opt.data_dict.get('anchors')),
+	                      np.array(opt.data_dict.get('output_shapes')),
+	                      opt.data_dict.get('imgsz'),
+	                      opt.data_dict.get('strides'))
 	for path, img, im0s, vid_cap in dataset:
 		if opt.plot_move_routes and route_mask is None:
 			# initialize something for ploting move routes
@@ -254,13 +232,13 @@ def trt_detect(save_img=False):
 							movement_routes_vid_writer = cv2.VideoWriter(
 								os.path.join('/'.join(save_path.split('/')[:-1]), 'movement_routes_' + filename),
 								cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+							movement_routes_vid_writer.write(route_img)
 						if opt.cover_heatmap:
 							cover_heatmap_vid_writer = cv2.VideoWriter(
 								os.path.join('/'.join(save_path.split('/')[:-1]), 'cover_heatmap_' + filename),
 								cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+							cover_heatmap_vid_writer.write(cover_heatmap_img)
 					vid_writer.write(im0)
-					movement_routes_vid_writer.write(route_img)
-					cover_heatmap_vid_writer.write(cover_heatmap_img)
 
 		img_index += 1
 	if save_txt or save_img:
@@ -422,6 +400,8 @@ if __name__ == '__main__':
 	parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
 	parser.add_argument('--with-trt', action='store_true',
 	                    help='inference with tensorrt engine(Only work with tensorrt inference)')
+	parser.add_argument('--yaml-path', type=str, default='config/trt_config.yaml', help='yaml filepath of tensorrt inference config')
+	parser.add_argument('--choose-config', type=str, default='yolov5s', help='choose tensorrt inference config in yaml')
 	parser.add_argument('--plot-move-routes', action='store_true',
 	                    help='drawing the robot movement routes(only surpport video or streams)')
 	parser.add_argument('--move-routes-interval', type=int, default=1,

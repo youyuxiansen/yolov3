@@ -27,6 +27,7 @@
 storage.googleapis.com
 runs/*
 data/*
+/__pycache__/
 !data/images/zidane.jpg
 !data/images/bus.jpg
 !data/coco.names
@@ -35,7 +36,7 @@ data/*
 !data/coco_*.data
 !data/coco_*.txt
 !data/trainvalno5k.shapes
-!data/*.sh
+!data/scripts/*.sh
 
 pycocotools/*
 results*.txt
@@ -251,3 +252,7 @@ com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
 fabric.properties
+
+
+# vsc stuff
+.vscode/

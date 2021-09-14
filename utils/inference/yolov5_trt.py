@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 import pycuda.driver as cuda
 import tensorrt as trt
-import torch
+# import torch
 
 CONF_THRESH = 0.5
 IOU_THRESHOLD = 0.4

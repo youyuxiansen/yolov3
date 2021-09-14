@@ -9,7 +9,8 @@ import numpy as np
 
 
 class Processor():
-	def __init__(self, model, anchor_nums, nc, anchors, output_shapes, img_size):
+	# @profile
+	def __init__(self, model, anchor_nums, nc, anchors, output_shapes, img_size, strides):
 		# load tensorrt engine
 		self.cfx = cuda.Device(0).make_context()
 		TRT_LOGGER = trt.Logger(trt.Logger.INFO)
@@ -42,14 +43,19 @@ class Processor():
 		self.no = self.nc + 5  # outputs per anchor
 		# post processing config
 		self.output_shapes = output_shapes
-		self.strides = np.array([8., 16., 32.])
+		self.strides = strides
 		self.na = len(anchors[0])
 		self.nl = len(anchors)
 		self.img_size = img_size
-		a = anchors.copy().astype(np.float32)
-		a = a.reshape(self.nl, -1, 2)
-		self.anchors = a.copy()
-		self.anchor_grid = a.copy().reshape(self.nl, 1, -1, 1, 1, 2)
+		self.anchors = anchors.copy().astype(np.float32).reshape(self.nl, -1, 2)
+		self.anchor_grid = self.anchors.copy().reshape(self.nl, 1, -1, 1, 1, 2)
+
+	def __del__(self):
+		# 	del self.inputs
+		# 	del self.outputs
+		# 	del self.stream
+		self.cfx.pop()
+		self.cfx.detach()  # 2. 实例释放时需要detech cuda上下文
 
 	def detect(self, img):
 		# resized = self.pre_process(img)
@@ -61,7 +67,6 @@ class Processor():
 			reshaped.append(output.reshape(shape))
 		output = self.post_process(reshaped, 0.4)
 		return output
-
 
 	def pre_process(self, img):
 		INPUT_W = 640
@@ -234,7 +239,7 @@ class Processor():
 		return np.exp(array)
 
 	def center_point(self, boxes):
-		return [boxes[0] + (boxes[2] - boxes[0])/2, boxes[1] + (boxes[3] - boxes[1])/2]
+		return [boxes[0] + (boxes[2] - boxes[0]) / 2, boxes[1] + (boxes[3] - boxes[1]) / 2]
 
 	def non_max_suppression(self, boxes, confs, classes, iou_thres=0.6):
 		x1 = boxes[:, 0]
@@ -285,3 +290,6 @@ class Processor():
 		y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
 		y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
 		return y
+
+
+
