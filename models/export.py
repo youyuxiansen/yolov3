@@ -7,6 +7,7 @@ Usage:
 import argparse
 import sys
 import time
+import numpy as np
 
 sys.path.append('./')  # to run '$ python *.py' files in subdirectories
 

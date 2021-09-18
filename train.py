@@ -457,6 +457,7 @@ def train(hyp, opt, device, tb_writer=None):
         wandb_logger.finish_run()
     else:
         dist.destroy_process_group()
+
     torch.cuda.empty_cache()
     return results
 

@@ -57,7 +57,7 @@ class Processor():
 		self.cfx.pop()
 		self.cfx.detach()  # 2. 实例释放时需要detech cuda上下文
 
-	def detect(self, img):
+	def detect(self, img, conf_thresh=0.4):
 		# resized = self.pre_process(img)
 		# cv2.imwrite('/home/yousixia/project/yolov3/runs/detect/tmp/trt_infer.jpg', resized.transpose(1,2,0))
 		outputs = self.inference(img)
@@ -65,7 +65,7 @@ class Processor():
 		reshaped = []
 		for output, shape in zip(outputs, self.output_shapes):
 			reshaped.append(output.reshape(shape))
-		output = self.post_process(reshaped, 0.4)
+		output = self.post_process(reshaped, conf_thresh)
 		return output
 
 	def pre_process(self, img):
@@ -278,8 +278,8 @@ class Processor():
 	def nms(self, pred, iou_thres=0.6):
 		boxes = self.xywh2xyxy(pred[..., 0:4])
 		# best class only
-		confs = np.amax(pred[:, 5:], 1, keepdims=True)
-		classes = np.argmax(pred[:, 5:], axis=-1)
+		confs = np.amax(pred[:, 4:5], 1, keepdims=True)
+		classes = np.argmax(pred[:, 5:6], axis=-1)
 		return self.non_max_suppression(boxes, confs, classes)
 
 	def xywh2xyxy(self, x):

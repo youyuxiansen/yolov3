@@ -20,7 +20,7 @@ from utils.plots import plot_one_box, plot_center_point, plot_move_routes, \
 	one_cover_two_with_mask
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
-from utils.inference import Processor
+from utils.inference.Processor import Processor
 import matplotlib.pyplot as plt
 
 
@@ -104,7 +104,7 @@ def trt_detect(save_img=False):
 			cover_heatmap_tmp.fill(0)
 		# Inference
 		# t1 = time_synchronized()
-		pred = processor.detect(img)
+		pred = processor.detect(img, opt.conf_thres)
 
 		# Process detections
 		for i, det in enumerate(pred):  # detections per image

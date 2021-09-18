@@ -828,8 +828,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         if cache_images:
             gb = 0  # Gigabytes of cached images
             self.img_hw0, self.img_hw = [None] * n, [None] * n
-            results = ThreadPool(8).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # multithreads
-            # results = ThreadPool(n if n < os.cpu_count() else os.cpu_count()).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # multithreads
+            # results = ThreadPool(16).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # multithreads
+            results = ThreadPool(min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8])).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # multithreads
             pbar = tqdm(enumerate(results), total=n)
             for i, x in pbar:
                 self.imgs[i], self.img_hw0[i], self.img_hw[i] = x  # img, hw_original, hw_resized = load_image(self, i)

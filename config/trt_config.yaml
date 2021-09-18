@@ -56,22 +56,22 @@ yolov5s_nano:
   imgsz: [ 640, 640 ]
 
 yolov5s_nano_robot_tracking:
-  anchor_nums: 4
+  anchor_nums: 4 # 代表anchors一行有多少组
   nc: 1
   anchors:
-    - [ [13, 8], [17, 15], [26, 13], [30, 26] ]  # P3/8
-    - [ [46, 22], [58, 32], [48, 55], [46, 64] ]  # P4/16
-    - [ [69, 45], [86, 59], [97, 80], [162, 126] ]
+     - [ [13, 8], [17, 15], [26, 13], [30, 26] ]  # P3/8
+     - [ [46, 22], [58, 32], [48, 55], [46, 64] ]  # P4/16
+     - [ [69, 45], [86, 59], [97, 80], [162, 126] ] # P5/32
 
   strides: [8., 16., 32.]
   output_shapes:
-    - [ 1, 4, 60, 80, 6 ] #  4 means anchor_nums; 6 means 5 + "nc"
+    - [ 1, 4, 60, 80, 6 ] #  4 代表anchor_nums; 6 means 5 + "nc"
     - [ 1, 4, 30, 40, 6 ]
     - [ 1, 4, 15, 20, 6 ]
   #    - [1, "{{ anchor_nums }}", 60, 80, "5 + {{nc}}"] # 6 means 5 + "nc"
   #    - [1, "{{ anchor_nums }}", 30, 40, "5 + {{nc}}"]
   #    - [1, "{{ anchor_nums }}", 15, 20, "5 + {{nc}}"]
-  weights: /home/amicro/project/yolov3/best_nano.trt
+  weights: /home/yousixia/project/yolov3/runs/train/exp21/weights/best_175.trt
   imgsz: [ 640, 480 ]
 
 yolov5m_indoor:
