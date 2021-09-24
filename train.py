@@ -222,6 +222,8 @@ def train(hyp, opt, device, tb_writer=None):
             # Anchors
             if not opt.noautoanchor:
                 check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
+            saving_anchors = np.array(model.module.model[-1].anchor_grid.cpu()).astype(int).reshape(3, -1)
+            np.savetxt(wdir / "anchor_grids.txt", saving_anchors, fmt='%d')
             model.half().float()  # pre-reduce anchor precision
 
     # DDP mode
